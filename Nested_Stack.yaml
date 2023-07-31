@@ -1,0 +1,238 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Main Nested Stack Template.
+
+Parameters:
+  VpcStackName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+    
+  VpcCIDR:
+    Description: Please Enter the IP range for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: Please Enter the IP range for this VPC public subnet1.
+    Type: String
+    Default: 10.0.1.0/24
+
+  PublicSubnet2CIDR:
+    Description: Please Enter the IP range for this VPC public subnet2.
+    Type: String
+    Default: 10.0.2.0/24
+
+  PrivateSubnet1CIDR:
+    Description: Please Enter the IP range for this VPC private subnet1.
+    Type: String
+    Default: 10.0.11.0/24
+
+  PrivateSubnet2CIDR:
+    Description: Please Enter the IP range for this VPC private subnet2.
+    Type: String
+    Default: 10.0.12.0/24
+
+  SSHLocation: 
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,3})'
+    ConstraintDescription: Must be a valid ip Cidr Range pf the form x.x.x.x/x.
+    Default: 0.0.0.0/0
+    Description: The IP adrees range that can be used to access the web server using SSH.
+    MaxLength: '18'
+    MinLength: '9'
+    Type: String
+
+  ExportVpcStackName:
+    Description: The name of the VPC Stack that exports values 
+    Type: String
+
+  ExportAlbStackName:
+    Description: The name of the ALB stack that export values.
+    Type: String
+  
+  EC2KeyName:
+    Description: The name of an EC2 KeyPair to enable SSH access to the instance.
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: musa
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+  
+  EC2ImageID:
+    Description: The name of the VPC stack that export values.
+    Type: String
+    Default: ami-053b0d53c279acc90
+
+  WebServerLaunchTemplateName:
+    AllowedPattern: '[a-zA-Z0-9\(\)\.\-/_]+'
+    ConstraintDescription: Must be unique to his acocunt. Max 128 Characters.
+    Default: Lamp-Server-Launch_Template
+    Description: Name of the Launch Template
+    Type: String
+
+  InstanceType:
+    Description: Webservers EC2 Instacne Type.
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+    ConstraintDescription: Must be a valid EC2 Instacne Type.
+
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket containing the all the templates
+    Default: cfn-template09
+
+  DatabaseInstanceIdentifier:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with letter and conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: Instance Identifier name
+    MaxLength: 60
+    MinLength: 1
+    Type: String
+
+  DatabaseName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with letter and conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: MySQL database name
+    MaxLength: 64
+    MinLength: 1
+    Type: String
+
+  DatabaseUser:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with letter and conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: Username for MySQL database access
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: true
+    Type: String
+
+  DatabasePassword:
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: Must conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: Password for MySQL database access
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+
+  DatabaseBackupRetentionPeriod:
+    ConstraintDescription: Database backup retention period must be 0 and 35 days.
+    Default: 0
+    Description: The number of days for which automatic DB snapshots are retained.
+    MaxValue: 35
+    MinValue: 0
+    Type: Number
+
+  DatabaseAllocatedStorage:
+    ConstraintDescription: Must be between 5 and 1024GB
+    Default: 20
+    Description: The size of the databse (GB)
+    MaxValue: 1024
+    MinValue: 5
+    Type: Number
+
+  DatabaseInstanceClass:
+    AllowedValues:
+      - db.t2.micro
+    ConstraintDescription: Must select a valid database instacne type
+    Default: db.t2.micro
+    Description: The databse instacen type
+    Type: String
+
+  MultiAZDatabase:
+    AllowedValues:
+      - true
+      - false
+    ConstraintDescription: Must be eithe true or false
+    Default: false
+    Description: Creates a Multi-Az MYSQL Amazon RDS database Instance.
+    Type: String
+
+Resources:
+  vpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/VPC_CloudFormation.yaml
+      Parameters:
+        VpcStackName: !Ref VpcStackName
+        VpcCIDR: !Ref VpcCIDR
+        PublicSubnet1CIDR: !Ref PublicSubnet1CIDR
+        PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
+        PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
+        PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
+        SSHLocation: !Ref SSHLocation      
+
+  nat:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: vpc
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/NAT_ClouFormation.yaml
+      Parameters:
+        ExportVpcStackName: !Ref ExportVpcStackName
+
+  alb:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: vpc
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/ALB1_cloudformation.yaml
+      Parameters:
+        ExportVpcStackName: !Ref ExportVpcStackName        
+
+  asg:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:  
+      - vpc
+      - alb
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/ASG_CloudFormation.yaml
+      Parameters:
+        ExportVpcStackName: !Ref ExportVpcStackName
+        ExportAlbStackName: !Ref ExportAlbStackName
+        EC2KeyName: !Ref EC2KeyName
+        EC2ImageID: !Ref EC2ImageID
+        WebServerLaunchTemplateName: !Ref WebServerLaunchTemplateName
+        InstanceType: !Ref InstanceType    
+
+  rds:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:  
+      - vpc
+      - alb
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/RDS_CloudFormation.yaml
+      Parameters:
+        ExportVpcStackName: !Ref ExportVpcStackName
+        DatabaseInstanceIdentifier: !Ref DatabaseInstanceIdentifier
+        DatabaseName: !Ref DatabaseName
+        DatabaseUser: !Ref DatabaseUser
+        DatabasePassword: !Ref DatabasePassword
+        DatabaseBackupRetentionPeriod: !Ref DatabaseBackupRetentionPeriod
+        DatabaseAllocatedStorage: !Ref DatabaseAllocatedStorage
+        DatabaseInstanceClass: !Ref DatabaseInstanceClass
+        MultiAZDatabase: !Ref MultiAZDatabase
+
+
+Outputs:
+  MainStackVPC:
+    Description: VPC ID from the Main Stack
+    Value: !GetAtt vpc.Outputs.VPC
+
+  MainStackPublicSubnets:
+    Description: Comma-separated list of Public Subnet IDs from the Main Stack
+    Value: !Join [",", [!GetAtt vpc.Outputs.PublicSubnet1, !GetAtt vpc.Outputs.PublicSubnet2]]
+
+  MainStackPrivateSubnets:
+    Description: Comma-separated list of Private Subnet IDs from the Main Stack
+    Value: !Join [",", [!GetAtt vpc.Outputs.PrivateSubnet1, !GetAtt vpc.Outputs.PrivateSubnet2]]
+
+  MainStackALBSecurityGroup:
+    Description: Security Group ID for the Application Load Balancer from the Main Stack
+    Value: !GetAtt vpc.Outputs.ALBSecurityGroup
+                               
+
+  MainStackWebServerSecurityGroup:
+    Description: Security Group ID for the Web Server from the Main Stack
+    Value: !GetAtt vpc.Outputs.WebServerSecurityGroup

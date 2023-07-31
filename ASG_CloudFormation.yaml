@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: This template creates an Auto Scaling Group
+
+Parameters:
+  ExportVpcStackName:
+    Description: The name of the VPC stack that exports values.
+    Type: String
+
+  ExportAlbStackName:
+    Description: The name of the ALB stack that exports values.
+    Type: String
+
+  EC2KeyName:
+    Description: The name of an EC2 KeyPair to enable SSH access to the instance.
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: musa
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
+  EC2ImageID:
+    Description: The ID of the EC2 image to be used for the instances.
+    Type: String
+    Default: ami-053b0d53c279acc90
+
+  WebServerLaunchTemplateName:
+    AllowedPattern: '[a-zA-Z0-9\(\)\.\-/_]+'
+    ConstraintDescription: Must be unique to his account. Max 128 Characters.
+    Default: Lamp-Server-Launch_Template
+    Description: Name of the Launch Template
+    Type: String
+
+  InstanceType:
+    Description: Web servers EC2 Instance Type.
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+    ConstraintDescription: Must be a valid EC2 Instance Type.
+
+Resources:
+  WebServerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Ref WebServerLaunchTemplateName
+      LaunchTemplateData:
+        ImageId: !Ref EC2ImageID
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref EC2KeyName
+        SecurityGroupIds:
+          - !ImportValue
+            'Fn::Sub': '${ExportVpcStackName}-WebServerSecurity'
+        UserData:
+          Fn::Base64: |
+            #!/bin/bash -x
+            exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+
+            sudo apt-get update
+            sudo apt-get install expect -y
+
+            MYSQL_ROOT_PASSWORD="password"
+            MYSQL_ROOT_PASSWORD_W="wordpress"
+
+            function run_mysql_cmd() {
+              expect -c "
+                spawn sudo mysql -u root -p
+                expect \"Enter password:\"
+                send \"${MYSQL_ROOT_PASSWORD}\r\"
+                expect \"mysql>\"
+                send \"$1\r\"
+                expect \"mysql>\"
+              "
+            }
+
+            sudo apt-get install apache2 php libapache2-mod-php php-mysql mysql-server -y
+
+            run_mysql_cmd "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'wordpress';"
+
+            function run_mysql_cmd_W() {
+              expect -c "
+                spawn sudo mysql -u root -p
+                expect \"Enter password:\"
+                send \"${MYSQL_ROOT_PASSWORD_W}\r\"
+                expect \"mysql>\"
+                send \"$1\r\"
+                expect \"mysql>\"
+              "
+            }
+
+            run_mysql_cmd_W "CREATE USER 'wordpress'@'localhost' IDENTIFIED BY 'wordpress';"
+            run_mysql_cmd_W "CREATE DATABASE wordpress;"
+            run_mysql_cmd_W "GRANT ALL PRIVILEGES ON wordpress.* TO 'wordpress'@'localhost';"
+
+            cd /tmp
+            wget https://wordpress.org/latest.tar.gz
+            tar -xvf latest.tar.gz
+            sudo mv wordpress/ /var/www/html
+            rm -rf wordpress/
+            cd /var/www/html/
+            rm index.html
+            cd wordpress/
+            cp wp-config-sample.php wp-config.php
+            sed -i "s/database_name_here/wordpress/g" wp-config.php
+            sed -i "s/username_here/wordpress/g" wp-config.php
+            sed -i "s/password_here/wordpress/g" wp-config.php
+            sed -i "s/localhost/wordpress.cjhrqy0ejiqm.us-east-1.rds.amazonaws.com/g" wp-config.php
+            sudo systemctl restart apache2
+                    
+  WebServerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: LampAutoScalingGroup
+      VPCZoneIdentifier:
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet1'
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet2'
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchTemplate:
+        LaunchTemplateName: !Ref WebServerLaunchTemplateName
+        Version: !GetAtt WebServerLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 2
+      Tags:
+        - Key: Name
+          Value: AS-WebServer
+          PropagateAtLaunch: true
+
+      TargetGroupARNs:
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-ALBTargetGroup'
+
+  WebServerScalingUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      Cooldown: 60
+      ScalingAdjustment: 1
+
+  WebServerScalingDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      Cooldown: 60
+      ScalingAdjustment: -1
+
+  WebServerScalingUpPolicyAttachment:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      PolicyName: WebServerScalingUpPolicy
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 80  # Adjust this value as per your requirement (e.g., 80% CPU utilization)
+      Cooldown: 60
+
+  WebServerScalingDownPolicyAttachment:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      PolicyName: WebServerScalingDownPolicy
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50  # Adjust this value as per your requirement (e.g., 50% CPU utilization)
+      Cooldown: 60
+
+Outputs:
+  WebServerScalingUpPolicyARN:
+    Description: ARN of the Scaling Up Policy
+    Value: !Ref WebServerScalingUpPolicyAttachment
+
+  WebServerScalingDownPolicyARN:
+    Description: ARN of the Scaling Down Policy
+    Value: !Ref WebServerScalingDownPolicyAttachment

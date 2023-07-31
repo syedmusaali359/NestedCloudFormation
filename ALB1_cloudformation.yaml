@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This template creates an Application Load Balancer
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Export VPC Stack Name"
+        Parameters:
+          - ExportVpcStackName
+
+Parameters:
+  ExportVpcStackName:
+    Description: The name of the VPC Stack that exports values 
+    Type: String
+
+Resources:
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MyApplicationLoadBalancer
+      SecurityGroups:
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-ALBSecurityGroup'
+      Subnets:
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-PublicSubnet1'
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-PublicSubnet2'
+
+  ALBListenerNoSslCertificate:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - RedirectConfig:
+            Host: '#{host}'
+            Path: '/#{path}'
+            Port: '443'
+            Protocol: HTTPS
+            StatusCode: HTTP_301
+          Type: redirect
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200,302
+      Name: MyWebServers
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId:
+        !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-VPC'
+
+  ALBListenerRule:
+    Type: 'AWS::ElasticLoadBalancingV2::ListenerRule'
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/*"
+      ListenerArn: !Ref ALBListenerNoSslCertificate
+      Priority: 1
+
+Outputs:
+  ALBTargetGroup:
+    Description: Webserver target group
+    Export:
+      Name: !Sub '${ExportVpcStackName}-ALBTargetGroup'
+    Value: !Ref ALBTargetGroup
+
+  ApplicationLoadBalancerDnsName: 
+    Description: Application Load Balancer DNS name
+    Export:
+      Name: !Sub '${ExportVpcStackName}-ApplicationLoadBalancerDnsName'
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+
+  ApplicationLoadBalancerZoneID:
+    Description: Application Load Balancer Canonical Hosted Zone ID
+    Export:
+      Name: !Sub '${ExportVpcStackName}-ApplicationLoadBalancerZoneID'
+    Value: !GetAtt ApplicationLoadBalancer.CanonicalHostedZoneID

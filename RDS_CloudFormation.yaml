@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion:  2010-09-09
+
+Description: This Template create an RDS databse with MYSQL 8.0.33 engine
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - 
+        Label:
+          default: Export VPC Stack Name.
+        Parameters:
+          - ExportVpcStackName
+      -
+        Label:
+          default: Database Parameters
+        Parameters:
+          - DatabaseInstanceIdentifier
+          - DatabaseName
+          - DatabaseUser
+          - DatabasePassword
+          - DatabaseBackupRetentionPeriod
+          - DatabaseAllocatedStorage
+          - DatabaseInstanceClass
+          - MultiAZDatabase
+
+Parameters:
+  ExportVpcStackName:
+    Description: The Name of the vpc stack that export values.
+    Type: String
+
+  DatabaseInstanceIdentifier:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with letter and conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: Instance Identifier name
+    MaxLength: 60
+    MinLength: 1
+    Type: String
+
+  DatabaseName:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with letter and conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: MySQL database name
+    MaxLength: 64
+    MinLength: 1
+    Type: String
+
+  DatabaseUser:
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with letter and conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: Username for MySQL database access
+    MaxLength: 16
+    MinLength: 1
+    NoEcho: true
+    Type: String
+
+  DatabasePassword:
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: Must conatin only aphlanumeric characters.
+    Default: wordpress
+    Description: Password for MySQL database access
+    MaxLength: 41
+    MinLength: 8
+    NoEcho: true
+    Type: String
+
+  DatabaseBackupRetentionPeriod:
+    ConstraintDescription: Database backup retention period must be 0 and 35 days.
+    Default: 0
+    Description: The number of days for which automatic DB snapshots are retained.
+    MaxValue: 35
+    MinValue: 0
+    Type: Number
+
+  DatabaseAllocatedStorage:
+    ConstraintDescription: Must be between 5 and 1024GB
+    Default: 20
+    Description: The size of the databse (GB)
+    MaxValue: 1024
+    MinValue: 5
+    Type: Number
+
+  DatabaseInstanceClass:
+    AllowedValues:
+      - db.t2.micro
+    ConstraintDescription: Must select a valid database instacne type
+    Default: db.t2.micro
+    Description: The databse instacen type
+    Type: String
+
+  MultiAZDatabase:
+    AllowedValues:
+      - true
+      - false
+    ConstraintDescription: Must be eithe true or false
+    Default: false
+    Description: Creates a Multi-Az MYSQL Amazon RDS database Instance.
+    Type: String
+
+Resources:
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS databse
+      SubnetIds:
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet1'
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet2'
+      Tags:
+        - Key: Name
+          Value: database Subnets
+
+  DatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref DatabaseAllocatedStorage
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      BackupRetentionPeriod: !Ref DatabaseBackupRetentionPeriod
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      DBInstanceIdentifier: !Ref DatabaseInstanceIdentifier
+      DBName: !Ref DatabaseName
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      Engine: MySQL
+      EngineVersion: 8.0.33
+      MasterUsername: !Ref DatabaseUser
+      MasterUserPassword: !Ref DatabasePassword
+      MultiAZ: !Ref MultiAZDatabase
+      VPCSecurityGroups: 
+        - !ImportValue
+          'Fn::Sub': '${ExportVpcStackName}-DataBaseSecurityGroup'
+
+#Outputs:
