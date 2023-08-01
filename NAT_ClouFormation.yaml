@@ -3,10 +3,18 @@ AWSTemplateFormatVersion : 2010-09-09
 Description: This Template Creates a NAT Gateway In Each Public Subnet.
 
 Parameters:
-  ExportVpcStackName:
-    Description: The Name Of the VPC stack That Exports Values.
+  VpcId:
+    Description: The VPC ID
     Type: String
-
+  PublicSubnet1:
+    Description: The ID of public subnet 1
+    Type: String
+  PrivateSubnet1:
+    Description: The ID of Private subnet 1
+    Type: String
+  PrivateSubnet2: 
+    Description: The ID of Private subnet 2
+    Type: String
 Resources:
   NatGatewayEIP:
     Type: AWS::EC2::EIP
@@ -20,8 +28,7 @@ Resources:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt NatGatewayEIP.AllocationId
-      SubnetId: !ImportValue
-        'Fn::Sub': '${ExportVpcStackName}-PublicSubnet1'
+      SubnetId: !Ref PublicSubnet1
       Tags:
         - Key: Name
           Value: NAT Gateway Public Subnet 1
@@ -32,8 +39,7 @@ Resources:
       Tags:
       - Key: Name
         Value: Private Route Table
-      VpcId:
-        Fn::ImportValue: !Sub ${ExportVpcStackName}-VPC
+      VpcId: !Ref VpcId
 
   PrivateRoute1:
     Type: AWS::EC2::Route
@@ -46,12 +52,10 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PrivateRouteTable
-      SubnetId:
-        Fn::ImportValue: !Sub ${ExportVpcStackName}-PrivateSubnet1
+      SubnetId: !Ref PrivateSubnet1
 
   PrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PrivateRouteTable
-      SubnetId:
-        Fn::ImportValue: !Sub ${ExportVpcStackName}-PrivateSubnet2
+      SubnetId: !Ref PrivateSubnet2

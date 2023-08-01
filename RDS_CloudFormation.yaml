@@ -24,8 +24,16 @@ Metadata:
           - MultiAZDatabase
 
 Parameters:
-  ExportVpcStackName:
-    Description: The Name of the vpc stack that export values.
+  PrivateSubnet1:
+    Description: The Id of the Private subnet 1.
+    Type: String
+
+  PrivateSubnet2:
+    Description: The Id of the Private subnet 2.
+    Type: String
+
+  DataBaseServerSecurityGroup:
+    Description: The Id of the database security group.
     Type: String
 
   DatabaseInstanceIdentifier:
@@ -104,11 +112,9 @@ Resources:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: Subnet group for RDS databse
-      SubnetIds:
-        - !ImportValue
-          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet1'
-        - !ImportValue
-          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet2'
+      SubnetIds: 
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
       Tags:
         - Key: Name
           Value: database Subnets
@@ -129,7 +135,4 @@ Resources:
       MasterUserPassword: !Ref DatabasePassword
       MultiAZ: !Ref MultiAZDatabase
       VPCSecurityGroups: 
-        - !ImportValue
-          'Fn::Sub': '${ExportVpcStackName}-DataBaseSecurityGroup'
-
-#Outputs:
+        - !Ref DataBaseServerSecurityGroup

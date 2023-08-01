@@ -3,12 +3,20 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: This template creates an Auto Scaling Group
 
 Parameters:
-  ExportVpcStackName:
-    Description: The name of the VPC stack that exports values.
+  WebServerSecurityGroup:
+    Description: Security Group ID for the web server.
     Type: String
 
-  ExportAlbStackName:
-    Description: The name of the ALB stack that exports values.
+  PrivateSubnet1:
+    Description: A list of the private subnet1
+    Type: String
+
+  PrivateSubnet2:
+    Description: A list of the private subnet2
+    Type: String
+
+  ALBTargetGroup:
+    Description: Webserver target group
     Type: String
 
   EC2KeyName:
@@ -46,9 +54,8 @@ Resources:
         ImageId: !Ref EC2ImageID
         InstanceType: !Ref InstanceType
         KeyName: !Ref EC2KeyName
-        SecurityGroupIds:
-          - !ImportValue
-            'Fn::Sub': '${ExportVpcStackName}-WebServerSecurity'
+        SecurityGroupIds: 
+          - !Ref WebServerSecurityGroup
         UserData:
           Fn::Base64: |
             #!/bin/bash -x
@@ -109,11 +116,9 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AutoScalingGroupName: LampAutoScalingGroup
-      VPCZoneIdentifier:
-        - !ImportValue
-          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet1'
-        - !ImportValue
-          'Fn::Sub': '${ExportVpcStackName}-PrivateSubnet2'
+      VPCZoneIdentifier: 
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
       HealthCheckGracePeriod: 300
       HealthCheckType: ELB
       LaunchTemplate:
@@ -127,9 +132,8 @@ Resources:
           Value: AS-WebServer
           PropagateAtLaunch: true
 
-      TargetGroupARNs:
-        - !ImportValue
-          'Fn::Sub': '${ExportVpcStackName}-ALBTargetGroup'
+      TargetGroupARNs: 
+        - !Ref ALBTargetGroup 
 
   WebServerScalingUpPolicy:
     Type: AWS::AutoScaling::ScalingPolicy

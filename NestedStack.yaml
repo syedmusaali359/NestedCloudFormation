@@ -3,8 +3,9 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: Main Nested Stack Template.
 
 Parameters:
+###VPC_START###
   VpcStackName:
-    Description: An environment name that is prefixed to resource names
+    Description: The name of the VPC Stack that exports values 
     Type: String
     
   VpcCIDR:
@@ -41,45 +42,41 @@ Parameters:
     MinLength: '9'
     Type: String
 
-  ExportVpcStackName:
-    Description: The name of the VPC Stack that exports values 
+  S3BucketName:
     Type: String
+    Description: Name of the S3 bucket containing the all the templates
+    Default: cfn-template09
+###VPC_END###
 
-  ExportAlbStackName:
-    Description: The name of the ALB stack that export values.
-    Type: String
-  
+###ASG_START###
   EC2KeyName:
     Description: The name of an EC2 KeyPair to enable SSH access to the instance.
     Type: AWS::EC2::KeyPair::KeyName
     Default: musa
     ConstraintDescription: Must be the name of an existing EC2 KeyPair.
-  
+
   EC2ImageID:
-    Description: The name of the VPC stack that export values.
+    Description: The ID of the EC2 image to be used for the instances.
     Type: String
     Default: ami-053b0d53c279acc90
 
   WebServerLaunchTemplateName:
     AllowedPattern: '[a-zA-Z0-9\(\)\.\-/_]+'
-    ConstraintDescription: Must be unique to his acocunt. Max 128 Characters.
+    ConstraintDescription: Must be unique to his account. Max 128 Characters.
     Default: Lamp-Server-Launch_Template
     Description: Name of the Launch Template
     Type: String
 
   InstanceType:
-    Description: Webservers EC2 Instacne Type.
+    Description: Web servers EC2 Instance Type.
     Type: String
     Default: t2.micro
     AllowedValues:
       - t2.micro
-    ConstraintDescription: Must be a valid EC2 Instacne Type.
+    ConstraintDescription: Must be a valid EC2 Instance Type.
+###ASG_END###
 
-  S3BucketName:
-    Type: String
-    Description: Name of the S3 bucket containing the all the templates
-    Default: cfn-template09
-
+###RDS_START###
   DatabaseInstanceIdentifier:
     AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
     ConstraintDescription: Must begin with letter and conatin only aphlanumeric characters.
@@ -150,6 +147,7 @@ Parameters:
     Default: false
     Description: Creates a Multi-Az MYSQL Amazon RDS database Instance.
     Type: String
+###RDS_START###
 
 Resources:
   vpc:
@@ -163,15 +161,18 @@ Resources:
         PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
         PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
         PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
-        SSHLocation: !Ref SSHLocation      
-
+        SSHLocation: !Ref SSHLocation
+  
   nat:
     Type: AWS::CloudFormation::Stack
     DependsOn: vpc
     Properties:
       TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/NAT_ClouFormation.yaml
       Parameters:
-        ExportVpcStackName: !Ref ExportVpcStackName
+        VpcId: !GetAtt vpc.Outputs.VpcId
+        PublicSubnet1: !GetAtt vpc.Outputs.PublicSubnet1
+        PrivateSubnet1: !GetAtt vpc.Outputs.PrivateSubnet1
+        PrivateSubnet2: !GetAtt vpc.Outputs.PrivateSubnet2
 
   alb:
     Type: AWS::CloudFormation::Stack
@@ -179,8 +180,11 @@ Resources:
     Properties:
       TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/ALB1_cloudformation.yaml
       Parameters:
-        ExportVpcStackName: !Ref ExportVpcStackName        
-
+        ALBSecurityGroup: !GetAtt vpc.Outputs.ALBSecurityGroup
+        PublicSubnet1: !GetAtt vpc.Outputs.PublicSubnet1
+        PublicSubnet2: !GetAtt vpc.Outputs.PublicSubnet2
+        VpcId: !GetAtt vpc.Outputs.VpcId
+  
   asg:
     Type: AWS::CloudFormation::Stack
     DependsOn:  
@@ -189,13 +193,15 @@ Resources:
     Properties:
       TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/ASG_CloudFormation.yaml
       Parameters:
-        ExportVpcStackName: !Ref ExportVpcStackName
-        ExportAlbStackName: !Ref ExportAlbStackName
         EC2KeyName: !Ref EC2KeyName
         EC2ImageID: !Ref EC2ImageID
         WebServerLaunchTemplateName: !Ref WebServerLaunchTemplateName
-        InstanceType: !Ref InstanceType    
-
+        InstanceType: !Ref InstanceType
+        ALBTargetGroup: !GetAtt alb.Outputs.ALBTargetGroup
+        PrivateSubnet1: !GetAtt vpc.Outputs.PrivateSubnet1
+        PrivateSubnet2: !GetAtt vpc.Outputs.PrivateSubnet2
+        WebServerSecurityGroup: !GetAtt vpc.Outputs.WebServerSecurityGroup
+  
   rds:
     Type: AWS::CloudFormation::Stack
     DependsOn:  
@@ -204,7 +210,6 @@ Resources:
     Properties:
       TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/RDS_CloudFormation.yaml
       Parameters:
-        ExportVpcStackName: !Ref ExportVpcStackName
         DatabaseInstanceIdentifier: !Ref DatabaseInstanceIdentifier
         DatabaseName: !Ref DatabaseName
         DatabaseUser: !Ref DatabaseUser
@@ -213,12 +218,15 @@ Resources:
         DatabaseAllocatedStorage: !Ref DatabaseAllocatedStorage
         DatabaseInstanceClass: !Ref DatabaseInstanceClass
         MultiAZDatabase: !Ref MultiAZDatabase
-
+        PrivateSubnet1: !GetAtt vpc.Outputs.PrivateSubnet1
+        PrivateSubnet2: !GetAtt vpc.Outputs.PrivateSubnet2
+        DataBaseServerSecurityGroup: !GetAtt vpc.Outputs.DataBaseServerSecurityGroup
 
 Outputs:
+###VPC_START###
   MainStackVPC:
     Description: VPC ID from the Main Stack
-    Value: !GetAtt vpc.Outputs.VPC
+    Value: !GetAtt vpc.Outputs.VpcId
 
   MainStackPublicSubnets:
     Description: Comma-separated list of Public Subnet IDs from the Main Stack
@@ -231,8 +239,24 @@ Outputs:
   MainStackALBSecurityGroup:
     Description: Security Group ID for the Application Load Balancer from the Main Stack
     Value: !GetAtt vpc.Outputs.ALBSecurityGroup
-                               
 
   MainStackWebServerSecurityGroup:
     Description: Security Group ID for the Web Server from the Main Stack
     Value: !GetAtt vpc.Outputs.WebServerSecurityGroup
+###ALB_END###
+
+###ALB_START###
+  MainStackALBTargetGroup:
+    Description: Webserver target group
+    Value: !GetAtt alb.Outputs.ALBTargetGroup
+###ALB_END###
+
+###ASG_START###
+  MainStackWebServerScalingUpPolicyARN:
+    Description: ARN of the Scaling Up Policy
+    Value: !GetAtt asg.Outputs.WebServerScalingUpPolicyARN
+
+  MainStackWebServerScalingDownPolicyARN:
+    Description: AARN of the Scaling Down Policy
+    Value: !GetAtt asg.Outputs.WebServerScalingDownPolicyARN  
+###ASG_END###
