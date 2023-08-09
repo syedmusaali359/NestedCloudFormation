@@ -25,6 +25,7 @@ Parameters:
   VpcStackName:
     Description: The name of the VPC Stack that exports values 
     Type: String
+    Default: vpc
     
   VpcCIDR:
     Description: Please Enter the IP range for this VPC
@@ -242,15 +243,23 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          CidrIp: 0.0.0.0/0
+          #SourceSecurityGroupId: !Ref ALBSecurityGroup
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          CidrIp: 0.0.0.0/0
+          #SourceSecurityGroupId: !Ref ALBSecurityGroup
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          SourceSecurityGroupId: !Ref SSHSecurityGroup
+          CidrIp: 0.0.0.0/0
+          #SourceSecurityGroupId: !Ref SSHSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        
       Tags:
         - Key: Name
           Value: Web Server Security Group
