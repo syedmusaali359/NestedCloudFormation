@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for creating a private S3 bucket with customizable access control.
+Parameters:
+  BucketName:
+    Type: String
+    Description: Enter a unique name for the S3 bucket
+  AccessControl:
+    Type: String
+    Default: Private
+    Description: Choose the access control for the S3 bucket (Private, PublicRead, PublicReadWrite, AuthenticatedRead, etc.)
+Resources:
+  PrivateS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: !Ref AccessControl
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Suspended
+      Tags:
+        - Key: Name
+          Value: !Ref BucketName
