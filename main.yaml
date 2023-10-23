@@ -45,7 +45,7 @@ Parameters:
   S3BucketName:
     Type: String
     Description: Name of the S3 bucket containing the all the templates
-    Default: cfn-template09
+    Default: test359
 ###VPC_END###
 
 ###ASG_START###
@@ -149,6 +149,16 @@ Parameters:
     Type: String
 ###RDS_START###
 
+###EC2_START###
+  EC2GeneratedKeyName:
+    Description: The name of the generated EC2 KeyPair.
+    Type: String
+    Default: MyGeneratedKeyMusa
+    ConstraintDescription: Must be the name of the generated EC2 KeyPair.
+###EC2_END###
+
+
+
 Resources:
   vpc:
     Type: AWS::CloudFormation::Stack
@@ -210,6 +220,18 @@ Resources:
         PrivateSubnet1: !GetAtt vpc.Outputs.PrivateSubnet1
         PrivateSubnet2: !GetAtt vpc.Outputs.PrivateSubnet2
         DataBaseServerSecurityGroup: !GetAtt vpc.Outputs.DataBaseServerSecurityGroup
+
+  ec2:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/ec2.yaml
+      Parameters:
+        VpcId: !GetAtt vpc.Outputs.VpcId
+        PublicSubnet1: !GetAtt vpc.Outputs.PublicSubnet1
+        EC2ImageID: !Ref EC2ImageID
+        InstanceType: !Ref InstanceType
+        WebServerSecurityGroup: !GetAtt vpc.Outputs.WebServerSecurityGroup
+        EC2GeneratedKeyName: !Ref EC2GeneratedKeyName
 
 Outputs:
 ###VPC_START###
